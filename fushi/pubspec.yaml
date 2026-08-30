@@ -288,4 +288,5 @@ flutter:
     - assets/licenses/
     - assets/meta/
     - assets/popup/
+    - assets/popup/vendor/
     - assets/transforms/
