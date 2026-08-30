@@ -222,7 +222,7 @@ std::vector<TermResult> DictionaryQuery::query(const std::string& expression) co
 
 std::vector<TermResult> DictionaryQuery::query_raw(const std::string& expression) const {
   std::map<std::pair<std::string_view, std::string_view>, TermResult> term_map;
-  for (const auto& [name, styles, data] : term_dicts_) {
+  for (const auto& [name, styles, script, data] : term_dicts_) {
     uint64_t offset_addr = data->table(expression);
     if (offset_addr == 0) {
       continue;
@@ -304,7 +304,7 @@ std::vector<TermResult> DictionaryQuery::query_raw(const std::string& expression
 
 std::vector<KanjiResult> DictionaryQuery::query_kanji(const std::string& character) const {
   std::vector<KanjiResult> results;
-  for (const auto& [name, styles, data] : kanji_dicts_) {
+  for (const auto& [name, styles, script, data] : kanji_dicts_) {
     uint64_t offset_addr = data->table(character);
     if (offset_addr == 0) {
       continue;
@@ -386,7 +386,7 @@ void DictionaryQuery::query_freq(std::vector<TermResult>& terms) const {
 }
 
 void DictionaryQuery::enrich_freq(TermResult& term) const {
-  for (const auto& [name, styles, data] : freq_dicts_) {
+  for (const auto& [name, styles, script, data] : freq_dicts_) {
     uint64_t offset_addr = data->table(term.expression);
     if (offset_addr == 0) {
       continue;
@@ -450,7 +450,7 @@ void DictionaryQuery::query_pitch(std::vector<TermResult>& terms) const {
 }
 
 void DictionaryQuery::enrich_pitch(TermResult& term) const {
-  for (const auto& [name, styles, data] : pitch_dicts_) {
+  for (const auto& [name, styles, script, data] : pitch_dicts_) {
     uint64_t offset_addr = data->table(term.expression);
     if (offset_addr == 0) {
       continue;
@@ -570,7 +570,7 @@ std::vector<char> DictionaryQuery::get_media_file(const std::string& dict_name, 
 
 MediaFileView DictionaryQuery::get_media_file_view(const std::string& dict_name, const std::string& media_path) const {
   const std::string normalized_media_path = fushidicts::normalize_media_path(media_path);
-  for (const auto& [name, styles, data] : term_dicts_) {
+  for (const auto& [name, styles, script, data] : term_dicts_) {
     if (name != dict_name) {
       continue;
     }
