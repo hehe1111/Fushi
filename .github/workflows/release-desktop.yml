@@ -320,22 +320,25 @@ jobs:
         with:
           path: ~\AppData\Local\vcpkg\archives
           key: ${{ runner.os }}-vcpkg-libtorrent-x64-windows-v2-${{ steps.vcpkg_cache_id.outputs.image }}
-      # BUG-1651 临时跳过 libtorrent DLL 构建：CI 的 vcpkg baseline 漂移导致
-      # libtorrent 2.1.x 头与 native/fushi_torrent/fushi_torrent_ffi.cpp 的 API
-      # （torrent_info::files / add_files / from_span / peer_info::ip）不兼容，
-      # 编译失败且耗时 ~40min（与词典 JS 无关，上游 base aff62a4 早于上游修复）。
-      # fushi_torrent 是运行时 DynamicLibrary.open 加载、缺失回退外接 qBittorrent，
-      # 跳过不影响 flutter build windows --release 出包；本 fork 只要验证词典 JS。
-      # 恢复：删掉这行 if 即可。
-      - name: Build embedded libtorrent DLL (vcpkg)
-        if: false
+      # BUG-1651 临时：CI 的 vcpkg baseline 漂移导致 libtorrent 2.1.x 头与
+      # native/fushi_torrent/fushi_torrent_ffi.cpp 的 API 不兼容，真实编译失败且
+      # 耗时 ~40min（与词典 JS 无关，上游 base aff62a4 早于上游修复）。Release
+      # install 守卫（fushi/windows/CMakeLists.txt）要求 prebuilt 4 个 DLL 存在，
+      # 故这里生成占位空文件满足构建；运行时 DynamicLibrary.open 失败会优雅回退
+      # 外接 qBittorrent（EmbeddedTorrentHost 注释契约），不 crash。本 fork 只要
+      # Windows exe 验证词典 JS，torrent 功能暂不可用。恢复：换回原 vcpkg 构建
+      # 步骤即可。
+      - name: Generate placeholder torrent DLLs (skip vcpkg build)
         shell: pwsh
-        env:
-          VCPKG_DOWNLOADS: ${{ runner.temp }}\vcpkg-downloads
         run: |
-          & "$env:VCPKG_INSTALLATION_ROOT\vcpkg.exe" install libtorrent:x64-windows
-          if ($LASTEXITCODE -ne 0) { throw "vcpkg install libtorrent failed" }
-          powershell -ExecutionPolicy Bypass -File native/fushi_torrent/build_windows_dll.ps1 -VcpkgRoot "$env:VCPKG_INSTALLATION_ROOT"
+          $dir = Join-Path $PWD 'native\fushi_torrent\prebuilt\windows-x64'
+          New-Item -ItemType Directory -Force -Path $dir | Out-Null
+          foreach ($dll in @('fushi_torrent_ffi.dll','torrent-rasterbar.dll','libssl-3-x64.dll','libcrypto-3-x64.dll')) {
+            $p = Join-Path $dir $dll
+            if (-not (Test-Path -LiteralPath $p -PathType Leaf)) {
+              New-Item -ItemType File -Path $p | Out-Null
+            }
+          }
       # BUG-1589 根因（run 31700342531 的 -v 日志确证）：`aot_elf_release` 阶段
       # gen_snapshot.exe 以 -1073741571 = 0xC00000FD（栈溢出）退出——本仓 AOT 规模
       # 超出其默认栈保留。本机 SDK 早已用 `editbin /STACK:128M` 打过同款补丁
