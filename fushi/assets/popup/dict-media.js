@@ -21,13 +21,20 @@ function rewriteDictLinks(html, dictName) {
             return match;
         }
         return match.replace(/\bsrc=(['"])([^'"]+)\1/i, `src=${quote}${rewritten}${quote}`);
-    }).replace(/<script\b[^>]*\bsrc=(['"])([^'"]+)\1[^>]*>/gi, (match, quote, src) => {
+    }).replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, (match) => {
         // BUG-1651: keep the dict's own <script src="Foo.js"> tag in the DOM so
         // scripts that locate their resource base via
         // $(`script[src*="Foo.js"]`).attr("src") can still derive it; rewrite to
         // dictmedia:// so the base is a usable path. The tag itself never runs
         // (innerHTML-injected scripts are inert per spec); execution happens via
-        // executeDictScripts below.
+        // executeDictScripts below. Whole-tag replace also drops any inline body
+        // (L3: script text must not leak into the rendered DOM).
+        const srcMatch = match.match(/src\s*=\s*(['"])([^'"]+)\1/i);
+        if (!srcMatch) return match;
+        const src = srcMatch[2];
+        // L4: scheme-bearing / protocol-relative src is not a dict media path —
+        // leave it untouched (mirrors the <img> branch's rewriteDictionaryMediaPath).
+        if (/^(?:[a-z][a-z0-9+.-]*:|\/\/)/i.test(src)) return match;
         const normalized = normalizeDictMediaPath(src);
         return `<script src="dictmedia://${encodeURIComponent(normalized)}?dictionary=${encodeURIComponent(dictName)}"></script>`;
     });
@@ -51,7 +58,7 @@ function rewriteSoundMediaPath(rawPath, dictName) {
 // browser extension).
 function rewriteSoundMediaIn(root, dictName) {
     if (!root || !dictName) return;
-    root.querySelectorAll('[data-href^="sound:"], a[href^="sound:"]').forEach((el) => {
+    root.querySelectorAll('[data-href^="sound:" i], a[href^="sound:" i]').forEach((el) => {
         let rewritten = false;
         if (el.hasAttribute('data-href')) {
             const url = rewriteSoundMediaPath(el.getAttribute('data-href'), dictName);

@@ -4632,9 +4632,14 @@ function handleGlossaryAnchorClick(event, anchor) {
     // BUG-1651: rewriteSoundMediaIn 给被重写的发音媒体元素打上 data-fushi-sound。
     // 其 URL 形态在 app 内是 image://、在浏览器扩展是 http 媒体端点——必须在 http
     // 分支之前拦截，否则扩展侧会 openExternalLink 开新标签而不是播放。
+    // M2(审查)：取值优先被重写的 data-href（OALDPEX 的 <a href="#" data-href="sound:...">
+    // 形态 href 是占位符 "#"），href 仅兜底；# / javascript: 占位一律跳过。
     if (anchor.hasAttribute('data-fushi-sound')) {
-        const url = href || anchor.getAttribute('data-href') || '';
-        if (url) playWordAudio(url);
+        const dataHref = anchor.getAttribute('data-href');
+        let url = dataHref && dataHref.trim() ? dataHref : href;
+        if (url && !/^(?:#|javascript:)/i.test(url)) {
+            playWordAudio(url);
+        }
         return;
     }
     if (/^https?:\/\//i.test(href)) {

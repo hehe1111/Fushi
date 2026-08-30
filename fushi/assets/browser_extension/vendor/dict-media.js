@@ -59,7 +59,15 @@ function rewriteSoundMediaPath(rawPath, dictName) {
 
 function rewriteSoundMediaIn(root, dictName) {
     if (!root || !dictName) return;
-    root.querySelectorAll('[data-href^="sound:"], a[href^="sound:"]').forEach((el) => {
+    // H1(审查) / TODO-1215 同威胁模型：扩展环境（window.__fushiDictMedia 已设）
+    // 下 rewriteDictionaryMediaPath 返回带 sync token 的 http URL，绝不能写进宿主页
+    // DOM 的 data-href/href（shadow root 是 open 模式、content script 跑 <all_urls>，
+    // 宿主页脚本可读）。扩展不执行词典脚本，programmatic data-href 读取本就不存在，
+    // 故直接不重写——保留 sound://，点击由共享 popup.js handleGlossaryAnchorClick
+    // 的 sound: 分支在点击时才拼 token URL（BUG-1261，token 只活在一次调用里）。
+    const media = (typeof window !== 'undefined') ? window.__fushiDictMedia : null;
+    if (media && media.base && media.token) return;
+    root.querySelectorAll('[data-href^="sound:" i], a[href^="sound:" i]').forEach((el) => {
         let rewritten = false;
         if (el.hasAttribute('data-href')) {
             const url = rewriteSoundMediaPath(el.getAttribute('data-href'), dictName);

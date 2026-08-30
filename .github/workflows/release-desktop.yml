@@ -1929,10 +1929,12 @@ jobs:
           PLATFORM_LABEL: desktop
         run: bash tool/publish_update_manifest.sh
       # BUG-1651 临时只构建 Windows：Apple 产物 manifest 同步随 macos/ios 一并禁用。
+      # M3(审查)：此处是「叠加」禁用而非替换——恢复时删掉 `false && ` 即回到
+      # BUG-869 的原门禁（publish_manifest），不要整行 if 删成无条件运行。
       - name: Publish mirror update manifest (Apple assets)
         # BUG-869: gate on publish_manifest + manifest_channel so the `release`
         # event emits latest-stable.json without re-touching the manual Release.
-        if: false
+        if: false && steps.channel.outputs.publish_manifest == 'true'
         shell: bash
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

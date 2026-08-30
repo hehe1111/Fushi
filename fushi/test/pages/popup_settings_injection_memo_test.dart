@@ -426,6 +426,71 @@ void main() {
     });
   });
 
+  /// 审查修复（M1）：词典自带 JS（BUG-1651）走与 styles 完全同构的
+  /// `_scriptsCache` + `dictionaryScriptsJson` + `identical(cached.scriptsJson, ...)`
+  /// 链路，stylesJson 的三条身份前提必须**参数化复用**——一旦 scripts 侧退化为就地
+  /// mutate：map 身份不变 → 重导入词典后弹窗永远执行旧脚本且全链静默（脚本比样式
+  /// 更隐蔽：不崩、不报错，只是行为停留在旧版）。
+  group('scriptsJson identity 前提（BUG-1651 M1）', () {
+    test('dictionaryScripts / dictionaryScriptsJson 未变时返回同一实例', () {
+      final Map<String, String> first = FushiDicts.dictionaryScripts;
+      final Map<String, String> second = FushiDicts.dictionaryScripts;
+      expect(identical(first, second), isTrue,
+          reason: 'dictionaryScripts 不得每次返回防御性副本——memo 靠 map 身份判'
+              '变化，每次新实例会让 memo 永远不命中');
+
+      final String json1 =
+          DictionaryPopupWebViewState.dictionaryScriptsJson();
+      final String json2 =
+          DictionaryPopupWebViewState.dictionaryScriptsJson();
+      expect(identical(json1, json2), isTrue,
+          reason: 'map 身份未变时必须返回同一 String 实例——'
+              'buildPopupStaticSettingsJs 用 identical() 比它');
+    });
+
+    test('_scriptsCache 只允许整体重赋值，禁止就地 mutate', () {
+      final String src = File(
+        '../packages/fushi_dictionary/lib/src/engine/fushidicts.dart',
+      ).readAsStringSync();
+
+      final RegExp mutation = RegExp(
+        r'_scriptsCache\s*(?:\[|\.\s*(?:add|addAll|addEntries|remove|removeWhere|'
+        r'clear|update|updateAll|putIfAbsent))',
+      );
+      expect(mutation.hasMatch(src), isFalse,
+          reason: '就地修改不换 map 身份 → dictionaryScriptsJson() 不重编码 → '
+              'popup 静态段 memo 恒命中 → 重导入词典后弹窗永远执行旧脚本');
+
+      final int rebuildAt = src.indexOf('static void _rebuildScriptsCache()');
+      expect(rebuildAt, greaterThanOrEqualTo(0));
+      final String rebuild =
+          src.substring(rebuildAt, src.indexOf('\n  }', rebuildAt));
+      expect(RegExp(r'_scriptsCache\s*=\s*\{').allMatches(rebuild).length, 2,
+          reason: '空分支与重建分支都要整体赋新 map（身份变 = 内容变）');
+    });
+
+    test('注入侧的 identical 判据与编码缓存键没被改成内容比较', () {
+      final String injection = File(
+        'lib/src/pages/implementations/popup_settings_injection.dart',
+      ).readAsStringSync();
+      expect(injection, contains('identical(cached.scriptsJson, scriptsJson)'),
+          reason: '词典脚本 JSON 可能大（OALDPEX ~185KB），memo 命中判据必须是'
+              '身份比较；改成 == 内容比较就把 memo 性能修复抵消了');
+
+      final String webview = File(
+        'lib/src/pages/implementations/dictionary_popup_webview.dart',
+      ).readAsStringSync();
+      final int jsonAt =
+          webview.indexOf('static String dictionaryScriptsJson()');
+      expect(jsonAt, greaterThanOrEqualTo(0));
+      final String body =
+          webview.substring(jsonAt, webview.indexOf('\n  }', jsonAt));
+      expect(body, contains('identical(scripts, _cachedScriptsRef)'),
+          reason: 'JSON 编码缓存的失效键就是 scripts map 的身份（与 '
+              '_rebuildScriptsCache 整体重赋值同语义）');
+    });
+  });
+
   group('换字体：dictionary font JS memo（(name,path,mtime,size) 指纹键）', () {
     late Directory tempDir;
     late FushiDatabase db;
