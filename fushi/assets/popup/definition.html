@@ -6,6 +6,8 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <link rel="stylesheet" href="popup.css">
+    <!-- BUG-1651: 同 popup.html，jQuery 先加载以满足词典脚本宿主约定。 -->
+    <script src="vendor/jquery.min.js" charset="utf-8"></script>
     <script src="dict-media.js" charset="utf-8"></script>
     <script src="definition.js" charset="utf-8"></script>
 </head>

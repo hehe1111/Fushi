@@ -46,6 +46,53 @@ function rewriteDictLinks(html, dictName) {
     });
 }
 
+// BUG-1651: 与 in-app dict-media.js 同款宿主 shim（popup.js 三镜像共享会调用）。
+// 扩展环境不注入 __dictScriptTexts（不执行词典脚本），这些函数是无操作兜底，但
+// rewriteSoundMediaIn 的 data-href/href 重写走本文件的 rewriteDictionaryMediaPath
+// （扩展 → 带 token 的 http 媒体端点），点击经共享 popup.js 的 data-fushi-sound
+// 分支播放，不 openExternalLink。
+function rewriteSoundMediaPath(rawPath, dictName) {
+    const soundPath = `${rawPath}`.replace(/^sound:\/*/i, '').trim();
+    if (!soundPath) return null;
+    return rewriteDictionaryMediaPath(soundPath, dictName);
+}
+
+function rewriteSoundMediaIn(root, dictName) {
+    if (!root || !dictName) return;
+    root.querySelectorAll('[data-href^="sound:"], a[href^="sound:"]').forEach((el) => {
+        let rewritten = false;
+        if (el.hasAttribute('data-href')) {
+            const url = rewriteSoundMediaPath(el.getAttribute('data-href'), dictName);
+            if (url) {
+                el.setAttribute('data-href', url);
+                rewritten = true;
+            }
+        }
+        if (el.tagName === 'A' && el.hasAttribute('href')) {
+            const url = rewriteSoundMediaPath(el.getAttribute('href'), dictName);
+            if (url) {
+                el.setAttribute('href', url);
+                rewritten = true;
+            }
+        }
+        if (rewritten) {
+            el.setAttribute('data-fushi-sound', 'true');
+        }
+    });
+}
+
+function executeDictScripts(wrapper, dictName) {
+    if (!dictName) return;
+    const scriptText = window.__dictScriptTexts && window.__dictScriptTexts[dictName];
+    if (!scriptText) return;
+    window.__fushiDictScriptsExecuted = window.__fushiDictScriptsExecuted || {};
+    if (window.__fushiDictScriptsExecuted[dictName] === scriptText) return;
+    window.__fushiDictScriptsExecuted[dictName] = scriptText;
+    const script = document.createElement('script');
+    script.textContent = scriptText;
+    (document.head || document.documentElement).appendChild(script);
+}
+
 function constructDictCss(css, dictName, scopePrefix) {
     if (!css) return '';
     const prefix = scopePrefix || `[data-dictionary="${dictName}"]`;

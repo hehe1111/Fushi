@@ -20,6 +20,15 @@ struct DictionaryStyle {
   std::string styles;
 };
 
+// Behavior script (Foo.js) stored next to a dictionary at import time (MDX
+// dictionaries like OALD/OALDPEX ship interactive glossaries that expect the
+// host to load their JS). Content is loaded into memory alongside styles so the
+// popup can execute it after injecting a glossary.
+struct DictionaryScript {
+  std::string dict_name;
+  std::string script;
+};
+
 struct MediaFileView {
   const char* data;
   size_t size;
@@ -98,6 +107,7 @@ class DictionaryQuery {
   SWIFT_IMPORT_UNSAFE
   MediaFileView get_media_file_view(const std::string& dict_name, const std::string& media_path) const;
   std::vector<DictionaryStyle> get_styles() const;
+  std::vector<DictionaryScript> get_scripts() const;
   std::vector<std::string> get_freq_dict_order() const;
 
  private:
@@ -136,6 +146,7 @@ class DictionaryQuery {
 
     std::string name;
     std::string styles;
+    std::string script;
     std::unique_ptr<DictionaryData> data;
   };
   enum DictionaryType : uint8_t { TERM, FREQ, PITCH, KANJI };

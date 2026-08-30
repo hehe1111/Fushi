@@ -163,10 +163,13 @@ _DictionaryMediaResponse? _dictionaryMediaResponse(Uri url) {
     );
     if (data == null) return _DictionaryMediaResponse.notFound();
 
+    // BUG-1651: 不再硬编码 text/css——dictmedia:// 现在也服务词典脚本
+    // （<script src> 重写后的基准探测）与其它非 CSS 资源，Content-Type 按扩展名。
+    final String mime = dictionaryMediaMimeType(mediaPath);
     return _DictionaryMediaResponse.ok(
       data: data,
-      contentType: 'text/css',
-      contentEncoding: 'utf-8',
+      contentType: mime,
+      contentEncoding: mime.startsWith('text/') ? 'utf-8' : null,
     );
   }
 

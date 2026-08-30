@@ -12,6 +12,9 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <link rel="stylesheet" href="popup.css">
+    <!-- BUG-1651: jQuery 是 MDX 词典脚本（OALDPEX 等）的宿主约定，必须在 popup.js
+         前加载（欧路/DictTango/GoldenDict 宿主同样注入）。 -->
+    <script src="vendor/jquery.min.js" charset="utf-8"></script>
     <script src="dict-media.js" charset="utf-8"></script>
     <script src="selection.js" charset="utf-8"></script>
     <script src="popup.js" charset="utf-8"></script>

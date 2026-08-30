@@ -120,6 +120,12 @@ class FushiDictStyle {
   final String styles;
 }
 
+class FushiDictScript {
+  const FushiDictScript({required this.dictName, required this.script});
+  final String dictName;
+  final String script;
+}
+
 class FushiKanjiResult {
   const FushiKanjiResult({
     required this.character,
@@ -286,7 +292,7 @@ class FushiDicts {
   // ── singleton ──────────────────────────────────────────────────
   static FushiDicts? _instance;
   static Map<String, String> _stylesCache = {};
-
+  static Map<String, String> _scriptsCache = {};
   static FushiDicts get instance {
     assert(_instance != null, 'FushiDicts.initialize() must be called first');
     return _instance!;
@@ -337,6 +343,7 @@ class FushiDicts {
     }
     _instance = h;
     _rebuildStylesCache();
+    _rebuildScriptsCache();
   }
 
   static void initializeTyped({
@@ -362,6 +369,7 @@ class FushiDicts {
     }
     _instance = h;
     _rebuildStylesCache();
+    _rebuildScriptsCache();
   }
 
   static void rebuild(List<String> paths) {
@@ -382,6 +390,18 @@ class FushiDicts {
     }
     _stylesCache = {
       for (final s in _instance!.getStyles()) s.dictName: s.styles,
+    };
+  }
+
+  static Map<String, String> get dictionaryScripts => _scriptsCache;
+
+  static void _rebuildScriptsCache() {
+    if (_instance == null) {
+      _scriptsCache = {};
+      return;
+    }
+    _scriptsCache = {
+      for (final s in _instance!.getScripts()) s.dictName: s.script,
     };
   }
 
@@ -630,6 +650,26 @@ class FushiDicts {
       return styles;
     } finally {
       _bindings!.freeStyles(rPtr);
+      calloc.free(rPtr);
+    }
+  }
+
+  // ── scripts ─────────────────────────────────────────────────────
+  List<FushiDictScript> getScripts() {
+    final r = _bindings!.getScripts(_handle!);
+    final rPtr = calloc<FfiDictScripts>();
+    rPtr.ref = r;
+    try {
+      final scripts = <FushiDictScript>[];
+      for (int i = 0; i < r.count; i++) {
+        scripts.add(FushiDictScript(
+          dictName: _utf8OrEmpty(r.items[i].dictName),
+          script: _utf8OrEmpty(r.items[i].script),
+        ));
+      }
+      return scripts;
+    } finally {
+      _bindings!.freeScripts(rPtr);
       calloc.free(rPtr);
     }
   }

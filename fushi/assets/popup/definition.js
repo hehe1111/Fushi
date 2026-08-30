@@ -515,6 +515,10 @@ window.renderDefinition = function(contentJson, dictName, dictCss, fontSize, isD
                 const wrapper = document.createElement('div');
                 wrapper.innerHTML = rewriteDictLinks(contentJson, dictName);
                 container.appendChild(wrapper);
+                // BUG-1651: 与 popup.js 同款宿主 shim（sound:// → image:// 重写 +
+                // 执行词典落盘脚本），保证词典主页释义页与查词弹窗行为一致。
+                rewriteSoundMediaIn(wrapper, dictName);
+                executeDictScripts(wrapper, dictName);
                 reportHeight();
                 return;
             }

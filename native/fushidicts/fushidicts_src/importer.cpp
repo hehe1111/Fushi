@@ -1022,6 +1022,23 @@ std::string read_sibling_css(const std::string& primary_path) {
   return css;
 }
 
+// Read a script sitting next to a dictionary file, named by swapping the
+// extension to .js (Foo.mdx -> Foo.js). Returns "" if absent/empty/unreadable.
+// MDX dictionaries (OALD/OALDPEX and friends) ship behavior as a sibling JS the
+// host is expected to load; keep it so the query side can hand it to the popup.
+std::string read_sibling_js(const std::string& primary_path) {
+  auto js_path = fushi::fs_path(primary_path);
+  js_path.replace_extension(".js");
+  std::ifstream js_in(js_path, std::ios::binary | std::ios::ate);
+  if (!js_in) return "";
+  auto n = js_in.tellg();
+  if (n <= 0) return "";
+  std::string js(static_cast<size_t>(n), '\0');
+  js_in.seekg(0);
+  js_in.read(js.data(), static_cast<std::streamsize>(n));
+  return js;
+}
+
 ImportResult import_mdx(const std::string& mdx_path, const std::string& output_dir) {
   std::ifstream file(fushi::fs_path(mdx_path), std::ios::binary | std::ios::ate);
   if (!file.is_open()) {
@@ -1058,9 +1075,12 @@ ImportResult import_mdx(const std::string& mdx_path, const std::string& output_d
   // the dictionary (T4jiJuk.mdx -> T4jiJuk.css). Inline it as the dict's
   // styles.css so the popup's constructDictCss scopes and injects it; otherwise
   // the definitions render unstyled. Absent sibling -> empty -> no styles.css.
+  // Same for the sibling behavior script (Foo.mdx -> Foo.js): stored verbatim as
+  // script.js so the popup can execute it after injecting a glossary.
   std::string styles_css = read_sibling_css(mdx_path);
+  std::string script_js = read_sibling_js(mdx_path);
 
-  ImportResult result = dictionary_importer::write_simple_dict(title, entries, output_dir, styles_css);
+  ImportResult result = dictionary_importer::write_simple_dict(title, entries, output_dir, styles_css, script_js);
 
   // Auto-mount the media companions (Foo.mdx -> Foo.mdd + numbered overflow
   // parts Foo.N.mdd) into the same dict dir, so <img>/<link>/sound:// in the
@@ -1104,8 +1124,9 @@ ImportResult import_mdx_from_zip(Zip& zip, const std::string& output_dir) {
   };
 
   // Extract the .mdx plus its sibling media (.mdd, incl. numbered overflow
-  // parts Foo.N.mdd) / stylesheet (.css), flattened next to the .mdx so
-  // import_mdx's sibling auto-mount (collect_sibling_mdd_paths) finds them.
+  // parts Foo.N.mdd) / stylesheet (.css) / behavior script (.js), flattened next
+  // to the .mdx so import_mdx's sibling auto-mount (collect_sibling_mdd_paths +
+  // read_sibling_css/read_sibling_js) finds them.
   auto is_numbered_part_stem = [&stem](const std::string& fstem) {
     // "Foo.3" for stem "Foo": stem + '.' + at least one digit, digits only.
     if (fstem.size() < stem.size() + 2) return false;
@@ -1124,7 +1145,8 @@ ImportResult import_mdx_from_zip(Zip& zip, const std::string& output_dir) {
     std::string ext = fushi::fs_to_utf8(fushi::fs_path(fn).extension());
     std::string fstem = fushi::fs_to_utf8(fushi::fs_path(fn).stem());
     if ((ext == ".mdd" && (fstem == stem || is_numbered_part_stem(fstem))) ||
-        (ext == ".css" && fstem == stem)) {
+        (ext == ".css" && fstem == stem) ||
+        (ext == ".js" && fstem == stem)) {
       extract(static_cast<int>(i), fstem + ext);
     }
   }
@@ -1437,7 +1459,8 @@ ImportResult import_yomitan(Zip& zip, const std::string& output_dir, bool low_ra
 }  // end anonymous namespace
 
 ImportResult dictionary_importer::write_simple_dict(const std::string& title, const std::vector<SimpleEntry>& entries,
-                                                    const std::string& output_dir, const std::string& styles_css) {
+                                                    const std::string& output_dir, const std::string& styles_css,
+                                                    const std::string& script_js) {
   ImportResult result;
   try {
     result.title = sanitize_title(title);
@@ -1474,6 +1497,12 @@ ImportResult dictionary_importer::write_simple_dict(const std::string& title, co
       std::ofstream styles_file(fushi::fs_path(path + "/styles.css"), std::ios::binary);
       setup_stream_exceptions(styles_file);
       styles_file.write(styles_css.data(), static_cast<std::streamsize>(styles_css.size()));
+    }
+
+    if (!script_js.empty()) {
+      std::ofstream script_file(fushi::fs_path(path + "/script.js"), std::ios::binary);
+      setup_stream_exceptions(script_file);
+      script_file.write(script_js.data(), static_cast<std::streamsize>(script_js.size()));
     }
 
     ProcessedFile processed = process_simple_entries(entries);

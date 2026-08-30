@@ -2287,6 +2287,21 @@ JSON.stringify((function(){
     return _cachedStylesJson!;
   }
 
+  static String? _cachedScriptsJson;
+  static Map<String, String>? _cachedScriptsRef;
+
+  // BUG-1651: 同 styles 的按实例身份缓存。词典自带 JS（导入时落盘的 script.js）
+  // 以 {dictName: scriptText} 注入成 window.__dictScriptTexts，供弹窗在词条 HTML
+  // 注入后受控执行。
+  static String dictionaryScriptsJson() {
+    final Map<String, String> scripts = FushiDicts.dictionaryScripts;
+    if (!identical(scripts, _cachedScriptsRef)) {
+      _cachedScriptsJson = jsonEncode(scripts);
+      _cachedScriptsRef = scripts;
+    }
+    return _cachedScriptsJson!;
+  }
+
   static String buildLookupEntriesJson(DictionarySearchResult result) {
     final List<DictionaryEntry> entries = result.entries;
     if (entries.isEmpty) return '[]';

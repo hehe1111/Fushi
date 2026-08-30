@@ -146,6 +146,13 @@ void DictionaryQuery::add_dict(const std::string& path, DictionaryType type) {
     std::ifstream f(fushi::fs_path(path + "/styles.css"));
     dict.styles = std::string(std::istreambuf_iterator<char>(f), {});
   }
+  // BUG-1651: behavior script (Foo.js -> script.js) persisted by the importer.
+  // Loaded into memory alongside styles so the popup can execute it after
+  // injecting a glossary. Absent for dictionaries without bundled JS.
+  if (std::filesystem::exists(fushi::fs_path(path + "/script.js"))) {
+    std::ifstream f(fushi::fs_path(path + "/script.js"));
+    dict.script = std::string(std::istreambuf_iterator<char>(f), {});
+  }
 
   dict.data = std::make_unique<DictionaryData>();
 
@@ -631,6 +638,12 @@ MediaFileView DictionaryQuery::get_media_file_view(const std::string& dict_name,
 std::vector<DictionaryStyle> DictionaryQuery::get_styles() const {
   return term_dicts_ | std::views::filter([](const auto& d) { return !d.styles.empty(); }) |
          std::views::transform([](const auto& d) { return DictionaryStyle{d.name, d.styles}; }) |
+         std::ranges::to<std::vector>();
+}
+
+std::vector<DictionaryScript> DictionaryQuery::get_scripts() const {
+  return term_dicts_ | std::views::filter([](const auto& d) { return !d.script.empty(); }) |
+         std::views::transform([](const auto& d) { return DictionaryScript{d.name, d.script}; }) |
          std::ranges::to<std::vector>();
 }
 

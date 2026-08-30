@@ -114,6 +114,17 @@ final class FfiDictStyles extends Struct {
   external int count;
 }
 
+final class FfiDictScript extends Struct {
+  external Pointer<Utf8> dictName;
+  external Pointer<Utf8> script;
+}
+
+final class FfiDictScripts extends Struct {
+  external Pointer<FfiDictScript> items;
+  @Int32()
+  external int count;
+}
+
 final class FfiMediaFile extends Struct {
   external Pointer<Uint8> data;
   @Int32()
@@ -173,6 +184,10 @@ typedef _FreeLookupResultsDart = void Function(Pointer<FfiLookupResults> r);
 typedef _GetStylesDart = FfiDictStyles Function(Pointer<Void> handle);
 
 typedef _FreeStylesDart = void Function(Pointer<FfiDictStyles> r);
+
+typedef _GetScriptsDart = FfiDictScripts Function(Pointer<Void> handle);
+
+typedef _FreeScriptsDart = void Function(Pointer<FfiDictScripts> r);
 
 typedef _GetMediaDart = FfiMediaFile Function(
     Pointer<Void> handle, Pointer<Utf8> dictName, Pointer<Utf8> mediaPath);
@@ -235,6 +250,10 @@ class FushidictsFfiBindings {
         _GetStylesDart>('fushidicts_get_styles');
     freeStyles = _lib.lookupFunction<Void Function(Pointer<FfiDictStyles>),
         _FreeStylesDart>('fushidicts_free_styles');
+    getScripts = _lib.lookupFunction<FfiDictScripts Function(Pointer<Void>),
+        _GetScriptsDart>('fushidicts_get_scripts');
+    freeScripts = _lib.lookupFunction<Void Function(Pointer<FfiDictScripts>),
+        _FreeScriptsDart>('fushidicts_free_scripts');
     getMedia = _lib.lookupFunction<
         FfiMediaFile Function(Pointer<Void>, Pointer<Utf8>, Pointer<Utf8>),
         _GetMediaDart>('fushidicts_get_media');
@@ -272,6 +291,8 @@ class FushidictsFfiBindings {
   late final _FreeLookupResultsDart freeLookupResults;
   late final _GetStylesDart getStyles;
   late final _FreeStylesDart freeStyles;
+  late final _GetScriptsDart getScripts;
+  late final _FreeScriptsDart freeScripts;
   late final _GetMediaDart getMedia;
   late final _FreeMediaDart freeMedia;
   late final _QueryKanjiDart queryKanji;

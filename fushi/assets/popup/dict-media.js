@@ -21,7 +21,75 @@ function rewriteDictLinks(html, dictName) {
             return match;
         }
         return match.replace(/\bsrc=(['"])([^'"]+)\1/i, `src=${quote}${rewritten}${quote}`);
+    }).replace(/<script\b[^>]*\bsrc=(['"])([^'"]+)\1[^>]*>/gi, (match, quote, src) => {
+        // BUG-1651: keep the dict's own <script src="Foo.js"> tag in the DOM so
+        // scripts that locate their resource base via
+        // $(`script[src*="Foo.js"]`).attr("src") can still derive it; rewrite to
+        // dictmedia:// so the base is a usable path. The tag itself never runs
+        // (innerHTML-injected scripts are inert per spec); execution happens via
+        // executeDictScripts below.
+        const normalized = normalizeDictMediaPath(src);
+        return `<script src="dictmedia://${encodeURIComponent(normalized)}?dictionary=${encodeURIComponent(dictName)}"></script>`;
     });
+}
+
+// BUG-1651: `sound://xxx.mp3` → `image://?dictionary=...&path=xxx.mp3`, the same
+// byte channel <img>/gaiji already load from (and that new Audio() is proven to
+// play via playWordAudio). The prefix must be stripped first because
+// rewriteDictionaryMediaPath refuses scheme-bearing paths.
+function rewriteSoundMediaPath(rawPath, dictName) {
+    const soundPath = `${rawPath}`.replace(/^sound:\/*/i, '').trim();
+    if (!soundPath) return null;
+    return rewriteDictionaryMediaPath(soundPath, dictName);
+}
+
+// BUG-1651: after innerHTML injection, rewrite sound media attributes on the
+// live DOM so dictionary scripts reading data-href / href programmatically get a
+// loadable URL (OALDPEX-style: `globalAudio.src = $audio.data("href")`).
+// Rewritten elements get data-fushi-sound so handleGlossaryAnchorClick can play
+// them regardless of the URL form (image:// in-app, http media endpoint in the
+// browser extension).
+function rewriteSoundMediaIn(root, dictName) {
+    if (!root || !dictName) return;
+    root.querySelectorAll('[data-href^="sound:"], a[href^="sound:"]').forEach((el) => {
+        let rewritten = false;
+        if (el.hasAttribute('data-href')) {
+            const url = rewriteSoundMediaPath(el.getAttribute('data-href'), dictName);
+            if (url) {
+                el.setAttribute('data-href', url);
+                rewritten = true;
+            }
+        }
+        if (el.tagName === 'A' && el.hasAttribute('href')) {
+            const url = rewriteSoundMediaPath(el.getAttribute('href'), dictName);
+            if (url) {
+                el.setAttribute('href', url);
+                rewritten = true;
+            }
+        }
+        if (rewritten) {
+            el.setAttribute('data-fushi-sound', 'true');
+        }
+    });
+}
+
+// BUG-1651: execute a dictionary's bundled behavior script (import-time
+// script.js) after its glossary HTML is in the DOM. Only scripts persisted by
+// the importer (window.__dictScriptTexts, injected by the host) run — inline
+// <script> text inside glossary HTML stays inert (innerHTML never runs it).
+// Dedup key is the script TEXT: the same page session re-rendering the same dict
+// must not double-bind events, but a re-imported dict whose script changed gets
+// re-executed (stale in-memory flag must not block a fresh version).
+function executeDictScripts(wrapper, dictName) {
+    if (!dictName) return;
+    const scriptText = window.__dictScriptTexts && window.__dictScriptTexts[dictName];
+    if (!scriptText) return;
+    window.__fushiDictScriptsExecuted = window.__fushiDictScriptsExecuted || {};
+    if (window.__fushiDictScriptsExecuted[dictName] === scriptText) return;
+    window.__fushiDictScriptsExecuted[dictName] = scriptText;
+    const script = document.createElement('script');
+    script.textContent = scriptText;
+    (document.head || document.documentElement).appendChild(script);
 }
 
 function constructDictCss(css, dictName, scopePrefix) {

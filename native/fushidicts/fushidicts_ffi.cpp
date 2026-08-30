@@ -100,6 +100,16 @@ struct FfiDictStyles {
   int32_t count;
 };
 
+struct FfiDictScript {
+  char* dict_name;
+  char* script;
+};
+
+struct FfiDictScripts {
+  FfiDictScript* items;
+  int32_t count;
+};
+
 struct FfiKanjiResult {
   char* character;
   char* onyomi;
@@ -459,6 +469,32 @@ void fushidicts_free_styles(FfiDictStyles* r) {
   for (int i = 0; i < r->count; i++) {
     free(r->items[i].dict_name);
     free(r->items[i].styles);
+  }
+  free(r->items);
+}
+
+// ── scripts ──────────────────────────────────────────────────────────
+
+FUSHI_EXPORT
+FfiDictScripts fushidicts_get_scripts(void* handle) {
+  FfiDictScripts r{};
+  auto& q = static_cast<FushidictsHandle*>(handle)->query;
+  auto scripts = q.get_scripts();
+  r.count = static_cast<int32_t>(scripts.size());
+  r.items = static_cast<FfiDictScript*>(malloc(sizeof(FfiDictScript) * r.count));
+  for (int i = 0; i < r.count; i++) {
+    r.items[i].dict_name = dup(scripts[i].dict_name);
+    r.items[i].script = dup(scripts[i].script);
+  }
+  return r;
+}
+
+FUSHI_EXPORT
+void fushidicts_free_scripts(FfiDictScripts* r) {
+  if (!r) return;
+  for (int i = 0; i < r->count; i++) {
+    free(r->items[i].dict_name);
+    free(r->items[i].script);
   }
   free(r->items);
 }

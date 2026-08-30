@@ -98,6 +98,7 @@ function makeEl(tag, doc) {
       if (k === 'id') el.id = String(v);
     },
     getAttribute(k) { return k in el.attrs ? el.attrs[k] : null; },
+    hasAttribute(k) { return k in el.attrs; },
     removeAttribute(k) { delete el.attrs[k]; },
     matches(sel) {
       return String(sel).split(',').map((s) => s.trim()).some((s) => {

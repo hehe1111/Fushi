@@ -3231,6 +3231,11 @@ function createGlossarySection(dictName, contents, dictIdx, entryIdx, totalDicts
                     const wrapper = el('div');
                     wrapper.innerHTML = rewriteDictLinks(content, dictName);
                     parent.appendChild(wrapper);
+                    // BUG-1651: 词典自带 JS 的宿主 shim 两步——把 sound:// 媒体属性
+                    // 重写成可加载的 image:// URL（脚本读 data-href/href 直接播），
+                    // 再执行导入时随词典落盘的脚本（只执行脚本文件，内联 <script> 仍不跑）。
+                    rewriteSoundMediaIn(wrapper, dictName);
+                    executeDictScripts(wrapper, dictName);
                 } else {
                     renderStructuredContent(parent, content, null, dictName);
                 }
@@ -4624,6 +4629,14 @@ document.addEventListener('mousedown', (e) => {
 function handleGlossaryAnchorClick(event, anchor) {
     event.preventDefault();
     const href = (anchor.getAttribute('href') || '').trim();
+    // BUG-1651: rewriteSoundMediaIn 给被重写的发音媒体元素打上 data-fushi-sound。
+    // 其 URL 形态在 app 内是 image://、在浏览器扩展是 http 媒体端点——必须在 http
+    // 分支之前拦截，否则扩展侧会 openExternalLink 开新标签而不是播放。
+    if (anchor.hasAttribute('data-fushi-sound')) {
+        const url = href || anchor.getAttribute('data-href') || '';
+        if (url) playWordAudio(url);
+        return;
+    }
     if (/^https?:\/\//i.test(href)) {
         openExternalLink(href);
         return;

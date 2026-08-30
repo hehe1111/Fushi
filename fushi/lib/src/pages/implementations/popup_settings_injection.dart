@@ -491,6 +491,7 @@ class _PopupStaticSettingsMemo {
     required this.collapsedNames,
     required this.hiddenNames,
     required this.stylesJson,
+    required this.scriptsJson,
     required this.globalDictCSS,
     required this.customDictCSSJson,
     required this.product,
@@ -513,6 +514,7 @@ class _PopupStaticSettingsMemo {
   final String collapsedNames;
   final String hiddenNames;
   final String stylesJson;
+  final String scriptsJson;
   final String globalDictCSS;
   final String customDictCSSJson;
   final PopupStaticSettingsJs product;
@@ -568,6 +570,7 @@ PopupStaticSettingsJs buildPopupStaticSettingsJs({
   final String localeTag = LocaleSettings.currentLocale.languageTag;
 
   final String stylesJson = DictionaryPopupWebViewState.dictionaryStylesJson();
+  final String scriptsJson = DictionaryPopupWebViewState.dictionaryScriptsJson();
   final String collapsedNames = jsonEncode(appModel.dictionaries
       .where((d) => d.isCollapsed(JapaneseLanguage.instance))
       .map((d) => d.name)
@@ -600,6 +603,7 @@ PopupStaticSettingsJs buildPopupStaticSettingsJs({
       cached.collapsedNames == collapsedNames &&
       cached.hiddenNames == hiddenNames &&
       identical(cached.stylesJson, stylesJson) &&
+      identical(cached.scriptsJson, scriptsJson) &&
       cached.globalDictCSS == globalDictCSS &&
       cached.customDictCSSJson == customDictCSSJson) {
     return cached.product;
@@ -689,6 +693,10 @@ PopupStaticSettingsJs buildPopupStaticSettingsJs({
   final String tail = '''    window.dictionaryStyles = $stylesJson;
     window.globalDictCSS = ${jsonEncode(globalDictCSS)};
     window.customDictCSS = $customDictCSSJson;
+    // BUG-1651: 词典自带 JS（导入落盘的 script.js），{dictName: scriptText}。
+    // 弹窗词条 HTML 注入后由 executeDictScripts 受控执行；本 map 内容变（换词典集）
+    // 会让 memo 失效重发。
+    window.__dictScriptTexts = $scriptsJson;
 ''';
   final PopupStaticSettingsJs product = PopupStaticSettingsJs(
     head: head,
@@ -713,6 +721,7 @@ PopupStaticSettingsJs buildPopupStaticSettingsJs({
     collapsedNames: collapsedNames,
     hiddenNames: hiddenNames,
     stylesJson: stylesJson,
+    scriptsJson: scriptsJson,
     globalDictCSS: globalDictCSS,
     customDictCSSJson: customDictCSSJson,
     product: product,

@@ -106,6 +106,10 @@ add_fushi_test(mdx_encrypted_keyinfo_test mdx_encrypted_keyinfo_test.cpp
 # Builds a real on-disk MDX (mdx_fixture.hpp) + sibling .css and asserts it lands.
 add_fushi_test(simple_dict_css_test simple_dict_css_test.cpp
     "${FUSHI_ROOT}/fushidicts_external/libdeflate")
+# BUG-1651: sibling <base>.js (OALD/OALDPEX behavior script) must be extracted
+# from zip imports and persisted as script.js; get_scripts round-trips it.
+add_fushi_test(mdx_sibling_js_import_test mdx_sibling_js_import_test.cpp
+    "${FUSHI_ROOT}/fushidicts_external/libdeflate")
 # Phase A: MDD (MDX media companion) parses byte-exact and auto-mounts into the
 # dict as media.bin/idx; get_media_file returns the bytes by normalized path.
 add_fushi_test(mdd_media_import_test mdd_media_import_test.cpp
