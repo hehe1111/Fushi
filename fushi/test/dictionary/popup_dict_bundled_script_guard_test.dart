@@ -5,9 +5,12 @@ import 'package:flutter_test/flutter_test.dart';
 /// BUG-1651 源码守卫：词典自带 JS（OALDPEX 等 MDX 行为脚本）受控执行的三个不变式。
 ///
 /// 背景：import 侧把同 stem `.js` 落盘成 script.js，宿主注入 `window.__dictScriptTexts`，
-/// 弹窗在词条裸 HTML innerHTML 注入后由 executeDictScripts 动态执行。安全边界 = 只执行
-/// 「导入时落盘、宿主注入的脚本文本」，词条 HTML 里夹带的内联 <script> 仍保持 innerHTML
-/// 注入的惰性（HTML 规范本来就让它不执行）。
+/// 弹窗在词条裸 HTML innerHTML 注入后由 executeDictScripts 动态执行。安全边界 = 入库脚本
+/// 只来自「导入时落盘、宿主注入的脚本文本」；词条 HTML 里的内联 <script> 经 innerHTML
+/// 注入本身保持惰性，但 executeDictScripts 会在**该词典有入库脚本时**把词条自带的内联
+/// 脚本（如 OALDPEX 的 `<script>window.__oaldpexReady=true;</script>` 初始化 flag 设置器）
+/// 先执行掉——两者同属词典包信任域（欧路/DictTango 宿主本来就执行词条全部脚本），
+/// 无入库脚本的词典内联脚本仍完全不执行。
 ///
 /// popup.js 有三份镜像（in-app 弹窗 + 两份浏览器扩展 vendor 副本；byte-parity 由
 /// browser_extension_popup_parity_guard 另锁），本守卫在三份上各自断言语义约束，
@@ -88,12 +91,24 @@ void main() {
       expect(
         js.contains('window.__dictScriptTexts'),
         isTrue,
-        reason: '脚本文本只能来自宿主注入的 __dictScriptTexts（导入落盘物）',
+        reason: '入库脚本文本只能来自宿主注入的 __dictScriptTexts（导入落盘物）',
       );
       expect(
         js.contains("window.__dictScriptTexts[dictName]"),
         isTrue,
-        reason: '按词典名取值，绝不执行词条内容里的内联脚本',
+        reason: '入库脚本按词典名取值',
+      );
+    });
+
+    test('有入库脚本的词典：词条内联脚本在入库脚本前执行（flag 设置器）', () {
+      // 真机实证：OALDPEX 词条自带 <script>window.__oaldpexReady=true;</script>
+      // 作初始化 flag，oaldpex.js 顶层 if(!window.__oaldpexReady) throw。innerHTML
+      // 惰性让内联脚本不执行 → flag 永未设 → 脚本拒绝初始化。executeDictScripts
+      // 必须在注入入库脚本前执行词条内联脚本（与入库脚本同词典信任域）。
+      expect(
+        js.contains("wrapper.querySelectorAll('script:not([src])')"),
+        isTrue,
+        reason: '必须扫描词条内联 <script>（无 src）并在入库脚本前执行',
       );
     });
 
@@ -102,7 +117,7 @@ void main() {
       expect(create, greaterThan(-1),
           reason: '动态插入才执行（innerHTML 注入的 script 按规范惰性）');
       expect(js.contains('script.textContent = scriptText'), isTrue,
-          reason: '必须用 textContent 承载脚本文本（用 innerHTML 会把 <script> 文本'
+          reason: '入库脚本必须用 textContent 承载（用 innerHTML 会把 <script> 文本'
               '当 HTML 解析，破坏安全边界）');
     });
 

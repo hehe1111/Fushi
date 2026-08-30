@@ -112,6 +112,40 @@ test("安全边界：词条 HTML 里的内联 <script> 经 innerHTML 不执行",
   );
 });
 
+test("真机实证: 有入库脚本的词典，其词条内联 flag 脚本在入库脚本前执行", () => {
+  const dom = makeDom();
+  const win = dom.window;
+  // OALDPEX 词条自带 <script>window.__oaldpexReady=true;</script> 作初始化 flag
+  // 设置器，oaldpex.js 顶层 if(!window.__oaldpexReady) throw。入库脚本里模拟该守卫：
+  // 若 flag 未设就 throw，反之则置 __oaldpexInitDone。
+  win.__dictScriptTexts = {
+    OALD: 'if (!window.__oaldpexReady) { throw new Error("flag not set"); } window.__oaldpexInitDone = true;',
+  };
+  win.eval(dictMediaSrc);
+  const wrapper = win.document.createElement("div");
+  wrapper.innerHTML = "<script>window.__oaldpexReady = true;</script>";
+  win.document.body.appendChild(wrapper);
+  win.executeDictScripts(wrapper, "OALD");
+  assert.equal(win.__oaldpexReady, true, "内联 flag 脚本必须先执行");
+  assert.equal(win.__oaldpexInitDone, true, "入库脚本在 flag 就绪后正常执行");
+});
+
+test("无入库脚本的词典：内联脚本保持惰性（executeDictScripts 无操作）", () => {
+  const dom = makeDom();
+  const win = dom.window;
+  win.__dictScriptTexts = {}; // 无任何词典有入库脚本
+  win.eval(dictMediaSrc);
+  const wrapper = win.document.createElement("div");
+  wrapper.innerHTML = "<script>window.__inlineRan = true;</script>";
+  win.document.body.appendChild(wrapper);
+  win.executeDictScripts(wrapper, "OALD");
+  assert.equal(
+    win.__inlineRan,
+    undefined,
+    "无入库脚本的词典不得执行任何内联脚本",
+  );
+});
+
 test("扩展版 dict-media.js 携带共享 popup.js 依赖的三个函数", () => {
   for (const fn of [
     "function rewriteSoundMediaPath",

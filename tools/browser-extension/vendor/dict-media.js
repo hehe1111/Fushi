@@ -93,6 +93,23 @@ function executeDictScripts(wrapper, dictName) {
     if (!dictName) return;
     const scriptText = window.__dictScriptTexts && window.__dictScriptTexts[dictName];
     if (!scriptText) return;
+    // BUG-1651 真机实证：OALDPEX 词条内联 <script>window.__oaldpexReady=true;</script>
+    // 是初始化 flag 设置器（oaldpex.js 顶层 if(!window.__oaldpexReady) throw），
+    // innerHTML 惰性不执行它 → oaldpex.js 拒绝初始化。与入库脚本同词典信任域，
+    // 注入入库脚本前先执行词条自带内联脚本。扩展不注入 __dictScriptTexts，此函数
+    // 在扩展为无操作，内联执行不会触发。
+    if (wrapper) {
+        const inlineScripts = wrapper.querySelectorAll('script:not([src])');
+        for (let i = 0; i < inlineScripts.length; i++) {
+            const s = inlineScripts[i];
+            if (!s.textContent) continue;
+            const script = document.createElement('script');
+            script.textContent = s.textContent;
+            try {
+                (document.head || document.documentElement).appendChild(script);
+            } catch (_) { /* 单个内联脚本失败不阻断后续与入库脚本 */ }
+        }
+    }
     window.__fushiDictScriptsExecuted = window.__fushiDictScriptsExecuted || {};
     if (window.__fushiDictScriptsExecuted[dictName] === scriptText) return;
     window.__fushiDictScriptsExecuted[dictName] = scriptText;

@@ -87,10 +87,30 @@ function rewriteSoundMediaIn(root, dictName) {
 // Dedup key is the script TEXT: the same page session re-rendering the same dict
 // must not double-bind events, but a re-imported dict whose script changed gets
 // re-executed (stale in-memory flag must not block a fresh version).
+//
+// 安全边界修正（真机实证）：OALDPEX 词条末尾自带
+// `<script>window.__oaldpexReady = true;</script>` 作为 oaldpex.js 顶层
+// `if (!window.__oaldpexReady) throw` 的初始化 flag 设置器。innerHTML 惰性让
+// 它不执行 → flag 永远未设 → oaldpex.js 拒绝初始化（标签/发音全失效）。欧路/
+// DictTango 等宿主本来就执行词条**全部**脚本（含内联），故在注入入库脚本前，
+// 先把该词典词条自带的内联 <script> 执行掉——两者同属词典包信任域，不扩大
+// 实际攻击面（恶意词典反正有入库脚本注入点）。仅「有入库脚本的词典」触发。
 function executeDictScripts(wrapper, dictName) {
     if (!dictName) return;
     const scriptText = window.__dictScriptTexts && window.__dictScriptTexts[dictName];
     if (!scriptText) return;
+    if (wrapper) {
+        const inlineScripts = wrapper.querySelectorAll('script:not([src])');
+        for (let i = 0; i < inlineScripts.length; i++) {
+            const s = inlineScripts[i];
+            if (!s.textContent) continue;
+            const script = document.createElement('script');
+            script.textContent = s.textContent;
+            try {
+                (document.head || document.documentElement).appendChild(script);
+            } catch (_) { /* 单个内联脚本失败不阻断后续与入库脚本 */ }
+        }
+    }
     window.__fushiDictScriptsExecuted = window.__fushiDictScriptsExecuted || {};
     if (window.__fushiDictScriptsExecuted[dictName] === scriptText) return;
     window.__fushiDictScriptsExecuted[dictName] = scriptText;
