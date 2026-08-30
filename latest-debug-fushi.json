@@ -1,18 +1,18 @@
 {
   "schemaVersion": 1,
-  "version": "2.0.0-debug.11659",
-  "tag": "v2.0.0-debug.11659+d6c81a8",
+  "version": "2.0.0-debug.11661",
+  "tag": "v2.0.0-debug.11661+3009195",
   "channel": "debug",
   "prerelease": true,
-  "releaseSequence": 11659,
-  "notes": "Manual desktop debug-channel build from feat/dict-js-support @ d6c81a8. Debug releases are prerelease and never Latest.",
+  "releaseSequence": 11661,
+  "notes": "Manual desktop debug-channel build from feat/dict-js-support @ 3009195. Debug releases are prerelease and never Latest.",
   "assets": [
     {
-      "name": "fushi-2.0.0-debug.11659-windows-setup.exe",
-      "browser_download_url": "https://github.com/hehe1111/Fushi/releases/download/fushi-debug-rolling/fushi-2.0.0-debug.11659-windows-setup.exe",
-      "releaseSequence": 11659,
-      "tag": "v2.0.0-debug.11659+d6c81a8",
-      "version": "2.0.0-debug.11659"
+      "name": "fushi-2.0.0-debug.11661-windows-setup.exe",
+      "browser_download_url": "https://github.com/hehe1111/Fushi/releases/download/fushi-debug-rolling/fushi-2.0.0-debug.11661-windows-setup.exe",
+      "releaseSequence": 11661,
+      "tag": "v2.0.0-debug.11661+3009195",
+      "version": "2.0.0-debug.11661"
     }
   ]
 }
