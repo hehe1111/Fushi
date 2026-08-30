@@ -673,7 +673,11 @@ jobs:
           if-no-files-found: ignore
           retention-days: 14
 
+  # BUG-1651 临时只构建 Windows：macOS / iOS 构建先禁用（if: false），
+  # 避免在 fork 上无 Apple 签名 secrets 时白烧 runner 并阻塞验证。
+  # 恢复时删掉这行 if 即可。
   macos:
+    if: false
     runs-on: macos-latest
     permissions:
       contents: write
@@ -1145,7 +1149,9 @@ jobs:
           if-no-files-found: ignore
           retention-days: 14
 
+  # BUG-1651 临时只构建 Windows：见 macos job 注释。
   ios:
+    if: false
     runs-on: macos-latest
     permissions:
       contents: write
@@ -1583,7 +1589,7 @@ jobs:
           echo "已上传 TestFlight；App Store Connect 处理完成（通常 5-30 分钟）后才会出现在测试员列表里。"
 
   publish:
-    needs: [windows, macos, ios]
+    needs: [windows]
     if: ${{ always() }}
     runs-on: ubuntu-latest
     permissions:
@@ -1758,8 +1764,6 @@ jobs:
           tag_name: ${{ steps.channel.outputs.tag }}
           files: |
             fushi/build/release-artifacts/fushi-*-windows-setup.exe
-            fushi/build/release-artifacts/fushi-*-macos.zip
-            fushi/build/release-artifacts/fushi-*-ios.ipa
       # TODO-1049 / TODO-1123 / TODO-1129: same rolling-release asset GC as
       # release.yml. softprops upserts same-named assets but never removes a
       # PRIOR commit's asset (different seq/sha in the name) from the reused
@@ -1812,7 +1816,7 @@ jobs:
           PLATFORM_ASSETS=()
           for name in "${ASSET_NAMES[@]}"; do
             case "$name" in
-              *-windows-setup.exe|*-macos.zip|*-ios.ipa) PLATFORM_ASSETS+=("$name") ;;
+              *-windows-setup.exe) PLATFORM_ASSETS+=("$name") ;;
             esac
           done
           # Check length BEFORE re-expanding the (possibly empty) array: on macOS
@@ -1882,8 +1886,6 @@ jobs:
           make_latest: ${{ steps.channel.outputs.make_latest }}
           files: |
             fushi/build/release-artifacts/fushi-*-windows-setup.exe
-            fushi/build/release-artifacts/fushi-*-macos.zip
-            fushi/build/release-artifacts/fushi-*-ios.ipa
       # TODO-705: publish a mirror update manifest so beta/debug in-China update
       # checks succeed (raw.githubusercontent.com is proxiable; api.github.com
       # /releases is mirror-403'd, BUG-292). This pushes a DATA FILE to the
@@ -1915,10 +1917,11 @@ jobs:
           ASSET_GLOB: fushi-*-windows-setup.exe
           PLATFORM_LABEL: desktop
         run: bash tool/publish_update_manifest.sh
+      # BUG-1651 临时只构建 Windows：Apple 产物 manifest 同步随 macos/ios 一并禁用。
       - name: Publish mirror update manifest (Apple assets)
         # BUG-869: gate on publish_manifest + manifest_channel so the `release`
         # event emits latest-stable.json without re-touching the manual Release.
-        if: steps.channel.outputs.publish_manifest == 'true'
+        if: false
         shell: bash
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
