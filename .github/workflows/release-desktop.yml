@@ -320,7 +320,15 @@ jobs:
         with:
           path: ~\AppData\Local\vcpkg\archives
           key: ${{ runner.os }}-vcpkg-libtorrent-x64-windows-v2-${{ steps.vcpkg_cache_id.outputs.image }}
+      # BUG-1651 临时跳过 libtorrent DLL 构建：CI 的 vcpkg baseline 漂移导致
+      # libtorrent 2.1.x 头与 native/fushi_torrent/fushi_torrent_ffi.cpp 的 API
+      # （torrent_info::files / add_files / from_span / peer_info::ip）不兼容，
+      # 编译失败且耗时 ~40min（与词典 JS 无关，上游 base aff62a4 早于上游修复）。
+      # fushi_torrent 是运行时 DynamicLibrary.open 加载、缺失回退外接 qBittorrent，
+      # 跳过不影响 flutter build windows --release 出包；本 fork 只要验证词典 JS。
+      # 恢复：删掉这行 if 即可。
       - name: Build embedded libtorrent DLL (vcpkg)
+        if: false
         shell: pwsh
         env:
           VCPKG_DOWNLOADS: ${{ runner.temp }}\vcpkg-downloads
