@@ -124,3 +124,65 @@ test("扩展版 dict-media.js 携带共享 popup.js 依赖的三个函数", () =
     );
   }
 });
+
+test("审查 L3/L4: script 内联体不泄漏、scheme 源保留（rewriteDictLinks）", () => {
+  const dom = makeDom();
+  const win = dom.window;
+  win.eval(dictMediaSrc);
+  // L3: 带内联体的 <script src> 整块重写，内联文本不得泄漏进渲染 DOM。
+  const noInline = win.rewriteDictLinks(
+    '<script src="oaldpex.js">window.__inlineLeak = 1;</script>',
+    "OALD",
+  );
+  assert.ok(!noInline.includes("__inlineLeak"), "内联体必须被丢弃");
+  assert.ok(noInline.includes('src="dictmedia://oaldpex.js?dictionary=OALD"'));
+  // L4: scheme-bearing src 保持原样，不改成无效 dictmedia://。
+  const ext = win.rewriteDictLinks('<script src="https://cdn/x.js"></script>', "OALD");
+  assert.ok(ext.includes('src="https://cdn/x.js"'), "外链 script src 不得改写");
+  assert.ok(!ext.includes("dictmedia://"), "外链不得被 dictmedia:// 化");
+});
+
+test("审查 L5: SOUND:// 大写变体也被重写（大小写不敏感选择器）", () => {
+  const dom = makeDom();
+  const win = dom.window;
+  win.eval(dictMediaSrc);
+  const wrapper = win.document.createElement("div");
+  wrapper.innerHTML = '<a href="SOUND://a/b.mp3">b</a>';
+  win.rewriteSoundMediaIn(wrapper, "OALD");
+  const a = wrapper.querySelector("a");
+  assert.equal(
+    a.getAttribute("href"),
+    "image://?dictionary=OALD&path=a%2Fb.mp3",
+    "SOUND:// 大写必须同样被重写为 image://",
+  );
+  assert.equal(a.getAttribute("data-fushi-sound"), "true");
+});
+
+test("审查 M2: data-fushi-sound 点击优先用被重写的 data-href，跳过 # 占位 href", () => {
+  const dom = makeDom();
+  const win = dom.window;
+  // 真 popup.js 里 handleGlossaryAnchorClick 依赖的宿主全局：data-fushi-sound
+  // 分支只用 playWordAudio；其余 stub 掉以防走到其它分支。
+  win.playWordAudio = (u) => { win.__played = win.__played || []; win.__played.push(u); return Promise.resolve(true); };
+  win.openExternalLink = () => {};
+  win.markGlobalLookupExtHit = () => {};
+  win.flutter_inappwebview = { callHandler: () => {} };
+  const POPUP_URL = new URL("../../fushi/assets/popup/popup.js", import.meta.url);
+  const popupSrc = readFileSync(POPUP_URL, "utf8");
+  const m = popupSrc.match(/function handleGlossaryAnchorClick\s*\([^)]*\)\s*\{[\s\S]*?\n\}/);
+  assert.ok(m, "未能从 popup.js 提取 handleGlossaryAnchorClick");
+  win.eval(m[0]);
+
+  const a = win.document.createElement("a");
+  a.setAttribute("href", "#");
+  a.setAttribute("data-href", "image://?dictionary=OALD&path=b.mp3");
+  a.setAttribute("data-fushi-sound", "true");
+  win.document.body.appendChild(a);
+  const ev = new win.Event("click");
+  win.handleGlossaryAnchorClick(ev, a);
+  assert.deepEqual(
+    win.__played,
+    ["image://?dictionary=OALD&path=b.mp3"],
+    "href=# 占位必须被跳过，播放 data-href 里的可播 URL",
+  );
+});
