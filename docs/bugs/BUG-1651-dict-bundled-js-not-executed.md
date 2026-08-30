@@ -4,7 +4,7 @@
   1. **导入侧丢脚本** — `import_mdx_from_zip`（`native/fushidicts/fushidicts_src/importer.cpp:1119-1130`）只提取同 stem 的 `.mdd`/`.css`，`.js` 被直接丢弃；`import_mdx` 只 `read_sibling_css` 内联 styles.css（L1012-1023、L1061），从不落盘脚本。
   2. **渲染侧不执行** — `popup.js` L3232 裸 HTML 路径 `wrapper.innerHTML = rewriteDictLinks(content, dictName)` 经 innerHTML 注入的 `<script>` 按 HTML 规范一律不执行（标签留在 DOM 但不跑）；`definition.js` L516 同构。`rewriteDictLinks`（`dict-media.js` L14-25）只重写 `<link>`/`<img>`，不重写 `<script src>`。
   3. **宿主缺 shim** — oaldpex.js 依赖宿主注入 jQuery（通篇 `$(...)`，文件自身不含）与 `sound://` 发音约定（`globalAudio.src = $audio.data("href")`），弹窗页面两者皆无；`dictmedia` scheme handler 又把 content-type 硬编码 `text/css`（`dictionary_webview_media.dart` L166-170），即便脚本走 scheme 加载也会因 `application/octet-stream`/`text/css` 被拒。
-- **[x] ① 已修复** —（提交哈希待填）
+- **[x] ① 已修复** —（提交 `44d5e301`）
   - 导入侧：`importer.cpp` 新增 `read_sibling_js` + `import_mdx_from_zip` 提取同 stem `.js`（L1145-1149）+ `write_simple_dict` 落盘 `script.js`；
   - 查询侧：`query.hpp/query.cpp` 新增 `DictionaryScript` + `get_scripts()`（读取 `script.js`）；`fushidicts_ffi.cpp` 新增 `fushidicts_get_scripts/free_scripts`；Dart `fushidicts.dart` 新增 `dictionaryScripts` 缓存 + `getScripts()`；
   - 渲染侧：`dict-media.js` 新增 `executeDictScripts`（动态 createElement 执行，去重键=脚本文本，脚本变更可重跑）/`rewriteSoundMediaIn`（sound:// → image:// + `data-fushi-sound` 标记）/`rewriteSoundMediaPath`，`rewriteDictLinks` 增 `<script src>` → `dictmedia://`；`popup.js`/`definition.js` 裸 HTML 注入后接两个 shim；`handleGlossaryAnchorClick` 先拦截 `data-fushi-sound`；
