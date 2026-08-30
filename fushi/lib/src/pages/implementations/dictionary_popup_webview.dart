@@ -1067,6 +1067,7 @@ JSON.stringify((function(){
   // main frame. Read the popup assets from disk once and embed them inline.
   static String? _inlineCss;
   static String? _inlineDictMediaJs;
+  static String? _inlineJqueryJs;
   static String? _inlineSelectionJs;
   static String? _inlinePopupJs;
 
@@ -1084,11 +1085,13 @@ JSON.stringify((function(){
       // 永久失效（静默降级 file://）。
       final String css = _readPopupAsset('popup.css');
       final String dictMediaJs = _readPopupAsset('dict-media.js');
+      final String jqueryJs = _readPopupAsset('vendor/jquery.min.js');
       final String selectionJs = _readPopupAsset('selection.js');
       final String popupJs = _readPopupAsset('popup.js');
       _assignInlinePopupAssets(
         css: css,
         dictMediaJs: dictMediaJs,
+        jqueryJs: jqueryJs,
         selectionJs: selectionJs,
         popupJs: popupJs,
       );
@@ -1122,12 +1125,15 @@ JSON.stringify((function(){
     try {
       final String css = await _readPopupAssetAsync('popup.css');
       final String dictMediaJs = await _readPopupAssetAsync('dict-media.js');
+      final String jqueryJs =
+          await _readPopupAssetAsync('vendor/jquery.min.js');
       final String selectionJs = await _readPopupAssetAsync('selection.js');
       final String popupJs = await _readPopupAssetAsync('popup.js');
       if (_inlineCss != null) return; // 同步兜底路径已先完成。
       _assignInlinePopupAssets(
         css: css,
         dictMediaJs: dictMediaJs,
+        jqueryJs: jqueryJs,
         selectionJs: selectionJs,
         popupJs: popupJs,
       );
@@ -1143,6 +1149,7 @@ JSON.stringify((function(){
   static void _assignInlinePopupAssets({
     required String css,
     required String dictMediaJs,
+    required String jqueryJs,
     required String selectionJs,
     required String popupJs,
   }) {
@@ -1150,6 +1157,7 @@ JSON.stringify((function(){
     // （css 只在 <style> 里使用；产物字节与原实现一致）。
     _inlineCss = css.replaceAll('</style', r'<\/style');
     _inlineDictMediaJs = dictMediaJs;
+    _inlineJqueryJs = jqueryJs;
     _inlineSelectionJs = selectionJs;
     _inlinePopupJs = popupJs;
     _inlineHtmlCacheKey = null;
@@ -1176,6 +1184,9 @@ JSON.stringify((function(){
         '<head>'
         '<meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no">'
         '<style>$_inlineCss</style>'
+        // BUG-1651：jQuery 是词典脚本（OALDPEX）的宿主依赖，必须先于
+        // dict-media.js/popup.js 内联加载（与 popup.html 的加载顺序一致）。
+        '<script>$_inlineJqueryJs</script>'
         '<script>$_inlineDictMediaJs</script>'
         '<script>$_inlineSelectionJs</script>'
         '<script>$_inlinePopupJs</script>'
@@ -1197,12 +1208,14 @@ JSON.stringify((function(){
   static void debugSetInlinePopupAssets({
     required String css,
     required String dictMediaJs,
+    required String jqueryJs,
     required String selectionJs,
     required String popupJs,
   }) {
     _assignInlinePopupAssets(
       css: css,
       dictMediaJs: dictMediaJs,
+      jqueryJs: jqueryJs,
       selectionJs: selectionJs,
       popupJs: popupJs,
     );
@@ -1213,6 +1226,7 @@ JSON.stringify((function(){
   static void debugResetInlinePopupAssets() {
     _inlineCss = null;
     _inlineDictMediaJs = null;
+    _inlineJqueryJs = null;
     _inlineSelectionJs = null;
     _inlinePopupJs = null;
     _inlineHtmlCacheKey = null;

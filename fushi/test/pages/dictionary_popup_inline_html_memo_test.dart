@@ -14,6 +14,7 @@ void main() {
     DictionaryPopupWebViewState.debugSetInlinePopupAssets(
       css: css,
       dictMediaJs: 'var dm=1;',
+      jqueryJs: 'var jq=1;',
       selectionJs: 'var sel=1;',
       popupJs: 'var pj=1;',
     );
