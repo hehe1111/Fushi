@@ -73,6 +73,8 @@ jobs:
         with:
           flutter-version: '3.44.0'
           cache: true
+          # BUG-1651 提速：持久化 pub cache，pub get / apply patches 命中后秒级。
+          flutter-pub-cache: true
       - name: Resolve desktop release channel
         id: channel
         shell: bash
@@ -384,12 +386,26 @@ jobs:
             fushi/build/windows/x64/CMakeFiles/CMakeError.log
           if-no-files-found: ignore
           retention-days: 14
+      # BUG-1651 提速：Mihon 桌面 runtime 是最重的 bundle 步骤之一（~3min），大头是
+      # Temurin JDK 下载 + Gradle/Maven 依赖拉取。缓存 ~/.gradle 与 mihon 下载目录
+      # （key 含 mihon 源码哈希，改 tool/mihon/ 或 m_extension_server/ 才失效；
+      # restore-keys 前缀让小改动也能命中大部分）。DownloadCache 因此从 RUNNER_TEMP
+      # 移到持久缓存目录。
+      - name: Cache Mihon runtime downloads and Gradle
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle
+            .cache/mihon-downloads
+          key: mihon-runtime-${{ hashFiles('tool/mihon/**', 'third_party/m_extension_server/**') }}
+          restore-keys: |
+            mihon-runtime-
       - name: Bundle pinned Mihon desktop runtime
         shell: pwsh
         run: |
           .\tool\mihon\build_desktop_runtime.ps1 `
             -OutputDirectory "fushi\build\windows\x64\runner\Release\mihon_bridge" `
-            -DownloadCache "$env:RUNNER_TEMP\hibiki-mihon-downloads"
+            -DownloadCache ".cache\mihon-downloads"
           if ($LASTEXITCODE -ne 0) { throw "Mihon desktop runtime build failed ($LASTEXITCODE)" }
           .\tool\mihon\verify_desktop_runtime.ps1 `
             -RuntimeDirectory "fushi\build\windows\x64\runner\Release\mihon_bridge"
