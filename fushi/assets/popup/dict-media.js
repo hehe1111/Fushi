@@ -2,6 +2,17 @@ function normalizeDictMediaPath(raw) {
     return `${raw}`.trim().replace(/\\/g, '/').replace(/^(?:\.\/|\/)+/, '');
 }
 
+// BUG-1651 运行时诊断埋点（[DICT_SCRIPT] 前缀 → Dart onConsoleMessage →
+// error_log.txt）。覆盖整条链路：渲染 → 媒体重写 → 内联脚本 → 入库脚本执行 →
+// 初始化后 DOM 状态。允许冗余、避免遗漏；上线稳定后可整块删除。
+function __dictScriptLog(marker, detail) {
+    try {
+        if (window.console && typeof window.console.info === 'function') {
+            window.console.info('[DICT_SCRIPT] ' + marker + (detail !== undefined ? ' ' + detail : ''));
+        }
+    } catch (_) {}
+}
+
 function rewriteDictionaryMediaPath(rawPath, dictName) {
     const trimmed = `${rawPath}`.trim();
     if (!trimmed || /^(?:[a-z][a-z0-9+.-]*:|\/\/|#)/i.test(trimmed)) {
@@ -12,10 +23,13 @@ function rewriteDictionaryMediaPath(rawPath, dictName) {
 }
 
 function rewriteDictLinks(html, dictName) {
-    return html.replace(/<link[^>]*href=['"]([^'"]+)['"][^>]*>/gi, (match, href) => {
+    let nLink = 0, nImg = 0, nScript = 0, nScriptSkipped = 0;
+    const out = html.replace(/<link[^>]*href=['"]([^'"]+)['"][^>]*>/gi, (match, href) => {
+        nLink++;
         const normalized = normalizeDictMediaPath(href);
         return `<link rel="stylesheet" href="dictmedia://${encodeURIComponent(normalized)}?dictionary=${encodeURIComponent(dictName)}">`;
     }).replace(/<img\b[^>]*\bsrc=(['"])([^'"]+)\1[^>]*>/gi, (match, quote, src) => {
+        nImg++;
         const rewritten = rewriteDictionaryMediaPath(src, dictName);
         if (rewritten === null) {
             return match;
@@ -34,10 +48,18 @@ function rewriteDictLinks(html, dictName) {
         const src = srcMatch[2];
         // L4: scheme-bearing / protocol-relative src is not a dict media path —
         // leave it untouched (mirrors the <img> branch's rewriteDictionaryMediaPath).
-        if (/^(?:[a-z][a-z0-9+.-]*:|\/\/)/i.test(src)) return match;
+        if (/^(?:[a-z][a-z0-9+.-]*:|\/\/)/i.test(src)) {
+            nScriptSkipped++;
+            return match;
+        }
+        nScript++;
         const normalized = normalizeDictMediaPath(src);
         return `<script src="dictmedia://${encodeURIComponent(normalized)}?dictionary=${encodeURIComponent(dictName)}"></script>`;
     });
+    __dictScriptLog('rewriteDictLinks', 'dict=' + dictName + ' link=' + nLink +
+        ' img=' + nImg + ' script=' + nScript + ' scriptSkipped=' + nScriptSkipped +
+        ' len=' + html.length);
+    return out;
 }
 
 // BUG-1651: `sound://xxx.mp3` → `image://?dictionary=...&path=xxx.mp3`, the same
@@ -58,7 +80,9 @@ function rewriteSoundMediaPath(rawPath, dictName) {
 // browser extension).
 function rewriteSoundMediaIn(root, dictName) {
     if (!root || !dictName) return;
+    let nFound = 0, nRewritten = 0;
     root.querySelectorAll('[data-href^="sound:" i], a[href^="sound:" i]').forEach((el) => {
+        nFound++;
         let rewritten = false;
         if (el.hasAttribute('data-href')) {
             const url = rewriteSoundMediaPath(el.getAttribute('data-href'), dictName);
@@ -76,8 +100,11 @@ function rewriteSoundMediaIn(root, dictName) {
         }
         if (rewritten) {
             el.setAttribute('data-fushi-sound', 'true');
+            nRewritten++;
         }
     });
+    __dictScriptLog('rewriteSoundMediaIn', 'dict=' + dictName + ' found=' + nFound +
+        ' rewritten=' + nRewritten);
 }
 
 // BUG-1651: execute a dictionary's bundled behavior script (import-time
@@ -96,27 +123,53 @@ function rewriteSoundMediaIn(root, dictName) {
 // 先把该词典词条自带的内联 <script> 执行掉——两者同属词典包信任域，不扩大
 // 实际攻击面（恶意词典反正有入库脚本注入点）。仅「有入库脚本的词典」触发。
 function executeDictScripts(wrapper, dictName) {
+    __dictScriptLog('executeDictScripts.enter', 'dict=' + dictName + ' hasWrapper=' + !!wrapper);
     if (!dictName) return;
     const scriptText = window.__dictScriptTexts && window.__dictScriptTexts[dictName];
+    __dictScriptLog('executeDictScripts.loaded', 'dict=' + dictName +
+        ' loaded=' + (!!scriptText) + ' len=' + (scriptText ? scriptText.length : 0) +
+        ' dictScriptTextsKeys=' + (window.__dictScriptTexts ? Object.keys(window.__dictScriptTexts).join(',') : '(undefined)'));
     if (!scriptText) return;
+    let inlineCount = 0;
     if (wrapper) {
         const inlineScripts = wrapper.querySelectorAll('script:not([src])');
+        __dictScriptLog('executeDictScripts.inline', 'dict=' + dictName +
+            ' inlineScripts=' + inlineScripts.length);
         for (let i = 0; i < inlineScripts.length; i++) {
             const s = inlineScripts[i];
             if (!s.textContent) continue;
+            inlineCount++;
             const script = document.createElement('script');
             script.textContent = s.textContent;
             try {
                 (document.head || document.documentElement).appendChild(script);
-            } catch (_) { /* 单个内联脚本失败不阻断后续与入库脚本 */ }
+            } catch (e) {
+                __dictScriptLog('executeDictScripts.inlineError', 'dict=' + dictName +
+                    ' i=' + i + ' err=' + (e && e.message ? e.message : String(e)));
+            }
         }
     }
     window.__fushiDictScriptsExecuted = window.__fushiDictScriptsExecuted || {};
-    if (window.__fushiDictScriptsExecuted[dictName] === scriptText) return;
+    const dedupHit = window.__fushiDictScriptsExecuted[dictName] === scriptText;
+    __dictScriptLog('executeDictScripts.dedup', 'dict=' + dictName + ' hit=' + dedupHit);
+    if (dedupHit) return;
     window.__fushiDictScriptsExecuted[dictName] = scriptText;
     const script = document.createElement('script');
     script.textContent = scriptText;
-    (document.head || document.documentElement).appendChild(script);
+    try {
+        (document.head || document.documentElement).appendChild(script);
+    } catch (e) {
+        __dictScriptLog('executeDictScripts.scriptError', 'dict=' + dictName +
+            ' err=' + (e && e.message ? e.message : String(e)));
+        return;
+    }
+    // 执行后探针：词典脚本应已在 window 留下初始化痕迹、并在 wrapper 内建立容器。
+    __dictScriptLog('executeDictScripts.after', 'dict=' + dictName +
+        ' inlineExecuted=' + inlineCount +
+        ' oaldpexReady=' + window.__oaldpexReady +
+        ' oaldpexInit=' + (typeof window.oaldpexInit !== 'undefined') +
+        ' oaldpexContainers=' + document.querySelectorAll('oaldpex, .oaldpex').length +
+        ' scriptTags=' + document.querySelectorAll('script').length);
 }
 
 function constructDictCss(css, dictName, scopePrefix) {

@@ -2,6 +2,16 @@ function normalizeDictMediaPath(raw) {
     return `${raw}`.trim().replace(/\\/g, '/').replace(/^(?:\.\/|\/)+/, '');
 }
 
+// BUG-1651 运行时诊断埋点（[DICT_SCRIPT] 前缀）。与 in-app 同款；扩展环境不注入
+// __dictScriptTexts，埋点会显示 loaded=no（无操作兜底）。上线稳定后可删。
+function __dictScriptLog(marker, detail) {
+    try {
+        if (window.console && typeof window.console.info === 'function') {
+            window.console.info('[DICT_SCRIPT] ' + marker + (detail !== undefined ? ' ' + detail : ''));
+        }
+    } catch (_) {}
+}
+
 function rewriteDictionaryMediaPath(rawPath, dictName) {
     const trimmed = `${rawPath}`.trim();
     if (!trimmed || /^(?:[a-z][a-z0-9+.-]*:|\/\/|#)/i.test(trimmed)) {
@@ -25,10 +35,13 @@ function rewriteDictionaryMediaPath(rawPath, dictName) {
 }
 
 function rewriteDictLinks(html, dictName) {
-    return html.replace(/<link[^>]*href=['"]([^'"]+)['"][^>]*>/gi, (match, href) => {
+    let nLink = 0, nImg = 0;
+    const out = html.replace(/<link[^>]*href=['"]([^'"]+)['"][^>]*>/gi, (match, href) => {
+        nLink++;
         const normalized = normalizeDictMediaPath(href);
         return `<link rel="stylesheet" href="dictmedia://${encodeURIComponent(normalized)}?dictionary=${encodeURIComponent(dictName)}">`;
     }).replace(/<img\b[^>]*\bsrc=(['"])([^'"]+)\1[^>]*>/gi, (match, quote, src) => {
+        nImg++;
         const rewritten = rewriteDictionaryMediaPath(src, dictName);
         if (rewritten === null) {
             return match;
@@ -44,6 +57,9 @@ function rewriteDictLinks(html, dictName) {
         }
         return match.replace(/src=(['"])([^'"]+)\1/i, `src=${quote}${rewritten}${quote}`);
     });
+    __dictScriptLog('rewriteDictLinks', 'dict=' + dictName + ' link=' + nLink +
+        ' img=' + nImg + ' len=' + html.length);
+    return out;
 }
 
 // BUG-1651: 与 in-app dict-media.js 同款宿主 shim（popup.js 三镜像共享会调用）。
@@ -66,8 +82,13 @@ function rewriteSoundMediaIn(root, dictName) {
     // 故直接不重写——保留 sound://，点击由共享 popup.js handleGlossaryAnchorClick
     // 的 sound: 分支在点击时才拼 token URL（BUG-1261，token 只活在一次调用里）。
     const media = (typeof window !== 'undefined') ? window.__fushiDictMedia : null;
-    if (media && media.base && media.token) return;
+    if (media && media.base && media.token) {
+        __dictScriptLog('rewriteSoundMediaIn', 'dict=' + dictName + ' extEnv=yes skipRewrite');
+        return;
+    }
+    let nFound = 0, nRewritten = 0;
     root.querySelectorAll('[data-href^="sound:" i], a[href^="sound:" i]').forEach((el) => {
+        nFound++;
         let rewritten = false;
         if (el.hasAttribute('data-href')) {
             const url = rewriteSoundMediaPath(el.getAttribute('data-href'), dictName);
@@ -85,13 +106,19 @@ function rewriteSoundMediaIn(root, dictName) {
         }
         if (rewritten) {
             el.setAttribute('data-fushi-sound', 'true');
+            nRewritten++;
         }
     });
+    __dictScriptLog('rewriteSoundMediaIn', 'dict=' + dictName + ' extEnv=no found=' +
+        nFound + ' rewritten=' + nRewritten);
 }
 
 function executeDictScripts(wrapper, dictName) {
+    __dictScriptLog('executeDictScripts.enter', 'dict=' + dictName + ' hasWrapper=' + !!wrapper);
     if (!dictName) return;
     const scriptText = window.__dictScriptTexts && window.__dictScriptTexts[dictName];
+    __dictScriptLog('executeDictScripts.loaded', 'dict=' + dictName +
+        ' loaded=' + (!!scriptText) + ' len=' + (scriptText ? scriptText.length : 0));
     if (!scriptText) return;
     // BUG-1651 真机实证：OALDPEX 词条内联 <script>window.__oaldpexReady=true;</script>
     // 是初始化 flag 设置器（oaldpex.js 顶层 if(!window.__oaldpexReady) throw），
@@ -100,6 +127,8 @@ function executeDictScripts(wrapper, dictName) {
     // 在扩展为无操作，内联执行不会触发。
     if (wrapper) {
         const inlineScripts = wrapper.querySelectorAll('script:not([src])');
+        __dictScriptLog('executeDictScripts.inline', 'dict=' + dictName +
+            ' inlineScripts=' + inlineScripts.length);
         for (let i = 0; i < inlineScripts.length; i++) {
             const s = inlineScripts[i];
             if (!s.textContent) continue;
@@ -111,11 +140,22 @@ function executeDictScripts(wrapper, dictName) {
         }
     }
     window.__fushiDictScriptsExecuted = window.__fushiDictScriptsExecuted || {};
-    if (window.__fushiDictScriptsExecuted[dictName] === scriptText) return;
+    const dedupHit = window.__fushiDictScriptsExecuted[dictName] === scriptText;
+    __dictScriptLog('executeDictScripts.dedup', 'dict=' + dictName + ' hit=' + dedupHit);
+    if (dedupHit) return;
     window.__fushiDictScriptsExecuted[dictName] = scriptText;
     const script = document.createElement('script');
     script.textContent = scriptText;
-    (document.head || document.documentElement).appendChild(script);
+    try {
+        (document.head || document.documentElement).appendChild(script);
+    } catch (e) {
+        __dictScriptLog('executeDictScripts.scriptError', 'dict=' + dictName +
+            ' err=' + (e && e.message ? e.message : String(e)));
+        return;
+    }
+    __dictScriptLog('executeDictScripts.after', 'dict=' + dictName +
+        ' oaldpexInit=' + (typeof window.oaldpexInit !== 'undefined') +
+        ' oaldpexContainers=' + document.querySelectorAll('oaldpex, .oaldpex').length);
 }
 
 function constructDictCss(css, dictName, scopePrefix) {

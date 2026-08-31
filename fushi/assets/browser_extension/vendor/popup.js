@@ -3228,6 +3228,12 @@ function createGlossarySection(dictName, contents, dictIdx, entryIdx, totalDicts
                 renderStructuredContent(parent, JSON.parse(content), null, dictName);
             } catch {
                 if (/<[a-z][\s\S]*>/i.test(content)) {
+                    // BUG-1651 诊断埋点：裸 HTML 路径入口。
+                    if (typeof window.__dictScriptLog === 'function') {
+                        window.__dictScriptLog('renderContent.bareHtml',
+                            'dict=' + dictName + ' len=' + content.length +
+                            ' hasScriptTag=' + /<script/i.test(content));
+                    }
                     const wrapper = el('div');
                     wrapper.innerHTML = rewriteDictLinks(content, dictName);
                     parent.appendChild(wrapper);
@@ -4629,6 +4635,14 @@ document.addEventListener('mousedown', (e) => {
 function handleGlossaryAnchorClick(event, anchor) {
     event.preventDefault();
     const href = (anchor.getAttribute('href') || '').trim();
+    // BUG-1651 诊断埋点：点击命中哪个分支。
+    if (typeof window.__dictScriptLog === 'function') {
+        window.__dictScriptLog('glossaryClick',
+            'href=' + href +
+            ' fushiSound=' + anchor.hasAttribute('data-fushi-sound') +
+            ' soundScheme=' + /^sound:/i.test(href) +
+            ' dataHref=' + (anchor.getAttribute('data-href') || ''));
+    }
     // BUG-1651: rewriteSoundMediaIn 给被重写的发音媒体元素打上 data-fushi-sound。
     // 其 URL 形态在 app 内是 image://、在浏览器扩展是 http 媒体端点——必须在 http
     // 分支之前拦截，否则扩展侧会 openExternalLink 开新标签而不是播放。

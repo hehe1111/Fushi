@@ -1088,6 +1088,11 @@ JSON.stringify((function(){
       final String jqueryJs = _readPopupAsset('vendor/jquery.min.js');
       final String selectionJs = _readPopupAsset('selection.js');
       final String popupJs = _readPopupAsset('popup.js');
+      debugPrint(
+        '[DICT_SCRIPT] inline assets bytes css=${css.length} '
+        'dictMedia=${dictMediaJs.length} jquery=${jqueryJs.length} '
+        'selection=${selectionJs.length} popup=${popupJs.length}',
+      );
       _assignInlinePopupAssets(
         css: css,
         dictMediaJs: dictMediaJs,
@@ -2112,7 +2117,11 @@ JSON.stringify((function(){
       onConsoleMessage: (controller, consoleMessage) {
         final msg = consoleMessage.message;
         debugPrint('[PopupWebView] $msg');
-        if (msg.startsWith('[LONGPRESS]')) {
+        // BUG-1651 诊断：dict-media.js 的 __dictScriptLog 埋点（[DICT_SCRIPT] 前缀）
+        // 落 ErrorLogService → error_log.txt，覆盖整条词典脚本链路。
+        if (msg.startsWith('[DICT_SCRIPT]')) {
+          ErrorLogService.instance.log('PopupDictScript', msg);
+        } else if (msg.startsWith('[LONGPRESS]')) {
           ErrorLogService.instance.log('PopupLongPress', msg);
         } else if (msg.startsWith('[RENDER_CONTENT]') ||
             msg.startsWith('[RICHTEXT]') ||
@@ -2312,6 +2321,11 @@ JSON.stringify((function(){
     if (!identical(scripts, _cachedScriptsRef)) {
       _cachedScriptsJson = jsonEncode(scripts);
       _cachedScriptsRef = scripts;
+      // BUG-1651 诊断：记录本次缓存重建时词典脚本的规模与名称（校验导入落盘是否成功）。
+      debugPrint(
+        '[DICT_SCRIPT] dictionaryScriptsJson size=${scripts.length} '
+        'keys=${scripts.keys.toList()}',
+      );
     }
     return _cachedScriptsJson!;
   }
